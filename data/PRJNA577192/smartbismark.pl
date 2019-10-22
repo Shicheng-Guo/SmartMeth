@@ -3,7 +3,7 @@
 # bismark to alignment pair-end targeted methylation sequencing from multiplex pcr (targeted bisulfite sequencing)
 # Contact: Shicheng Guo
 # Version 1.4
-# Update: 10/02/2019
+# Update: 10/22/2019
 # smartbismark.pl 
 # USAGE: perl smartbismark.pl --input SraRunTable.txt --genome hg19 --phred=33 --server MCRI --queue shortq --BismarkRefereDb --submit 
 
@@ -21,7 +21,7 @@ my %SRR; my %SRA;
 while(<SRR>){
     chomp;
     next if /^\s+$/;
-	next if /sample_accession|BioProject/i;
+	next if /sample_accession|BioProject|AvgSpotLen/i;
 	my $SRR;
 	if(/(SRR\d+)/){
 	$SRR=$1;
@@ -31,23 +31,26 @@ while(<SRR>){
 		push @{$SRA{$SRX}},$SRR;
 		}
 	}elsif(/(.+)_R1/){
+                print "non-SRR id were detected!\n";
 		$SRR=$1;
 		my $SRX=$SRR;
 		push @{$SRA{$SRX}},$SRR;
-	}		
-print "$SRR\n";
+	}
+
+system("fastq-dump --skip-technical --split-files -X 6 --gzip $SRR");
+
 my @read = glob("$SRR\_*fastq*gz");
 my $chrLenhg19="~/hpc/db/hg19/hg19.chrom.sizes";
 my $cpgPoshg19="~/hpc/db/hg19/HsGenome19.CpG.positions.txt"; 
 my $curr_dir = $dir;
+
 if(scalar(@read) eq 2){
 my($sample,undef)=split /_1.fastq.gz|_R1.fastq.gz/,$read[0]; 	
 my($sample1,undef)=split /.fastq.gz/,$read[0];
 my($sample2,undef)=split /.fastq.gz/,$read[1];
 
-my $job_file_name = "$SRR.pbs";
-open(OUT, ">$job_file_name") || die("Error in opening file $job_file_name.\n");   
-    
+open OUT, ">$SRR.pbs" || die("Error in opening file $SRR.pbs\n");   
+  
 print OUT "#!/bin/bash\n";
 print OUT "#PBS -N $sample\n";
 print OUT "#PBS -q $queue\n";
@@ -56,23 +59,25 @@ print OUT "#PBS -M Guo.Shicheng\@marshfieldresearch.org\n";
 print OUT "#PBS -m abe\n";
 print OUT "cd $curr_dir\n";    
 
-my $extractor="bismark_methylation_extractor --no_overlap --multicore $multicore --merge_non_CpG --bedGraph --cutoff 10 --ignore 1 --buffer_size 4G";
+my $extractor="bismark_methylation_extractor --no_overlap --multicore $multicore --merge_non_CpG --bedGraph --cutoff 10 --ignore 1 --buffer_size 4G"; # --non_directional 
 my $bismark="bismark --bowtie2 --multicore $multicore --fastq -N 1"; 
 my $coverage2cytosine="coverage2cytosine --merge_CpG --gzip --genome_folder";
     
-print OUT "#fastq-dump --skip-technical --split-files --gzip $SRR\n";
+print OUT "fastq-dump --skip-technical --split-files --gzip $SRR\n";
 print OUT "trim_galore --paired --stringency 3 --phred$phred --clip_R1 2 --clip_R2 2 --fastqc --illumina $sample1\.fastq.gz $sample2\.fastq.gz --output_dir ../fastq_trim\n";
 print OUT "$bismark --phred$phred-quals $BismarkRefereDb -1 ../fastq_trim/$sample1\_val_1.fq.gz -2 ../fastq_trim/$sample2\_val_2.fq.gz -o ../bam\n";
 print OUT "filter_non_conversion --paired ../bam/$sample1\_val_1_bismark_bt2_pe.bam\n";
 print OUT "deduplicate_bismark --bam ../bam/$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.bam\n";   
 print OUT "$extractor --comprehensive --output ../methyfreq  ../bam/$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.bam\n";
-print OUT "# $coverage2cytosine $BismarkRefereDb -o ../bed/$sample1.mergeCpG.bed ../methyfreq/$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.bismark.cov.gz\n";
-print OUT "samtools sort -@ 8 ../bam/$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.bam -o ../sortbam/$sample\_bismark_bt2_pe.sortc.bam\n";
-print OUT "samtools index ../sortbam/$sample\_bismark_bt2_pe.sortc.bam\n";
-print OUT "cd ../sortbam\n";
-print OUT "perl ~/bin/samInfoPrep4Bam2Hapinfo.pl ~/oasis/db/hg19/hg19.cut10k.bed > saminfo.txt\n";
-print OUT "perl ~/bin/bam2hapInfo2PBS.pl saminfo.txt submit bismark $chrLenhg19 $cpgPoshg19\n";
-
+print OUT "rm ../methyfreq/CpG_context_$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.txt\n";
+print OUT "rm ../methyfreq/CpG_context_$sample2\_val_1_bismark_bt2_pe.nonCG_filtered.txt\n";
+print OUT "#$coverage2cytosine $BismarkRefereDb -o ../bed/$sample1.mergeCpG.bed ../methyfreq/$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.bismark.cov.gz\n";
+print OUT "#samtools sort -@ 8 ../bam/$sample1\_val_1_bismark_bt2_pe.nonCG_filtered.bam -o ../sortbam/$sample\_bismark_bt2_pe.sortc.bam\n";
+print OUT "#samtools index ../sortbam/$sample\_bismark_bt2_pe.sortc.bam\n";
+print OUT "#cd ../sortbam\n";
+print OUT "#perl ~/bin/samInfoPrep4Bam2Hapinfo.pl ~/oasis/db/hg19/hg19.cut10k.bed > saminfo.txt\n";
+print OUT "#perl ~/bin/bam2hapInfo2PBS.pl saminfo.txt submit bismark $chrLenhg19 $cpgPoshg19\n";
+close OUT;
 }elsif(scalar(@read) == 1){
 	my($sample,undef)=split /_1.fastq.gz|_R1.fastq.gz/,$read[0]; 	
 	my($sample1,undef)=split /.fastq.gz/,$read[0];
@@ -121,24 +126,24 @@ sub process_command_line{
 	my %ppn;
 	my %multicore;
 	my $nodes;
-    my $BismarkRefereDb;
+        my $BismarkRefereDb;
 	my $phred;
     
 	my $command_line=GetOptions ( 
-                                  "input=s"    		    => \$input,
-                                  "genome=s"   			=> \$genome,
+                                  "input=s"    		        => \$input,
+                                  "genome=s"            	=> \$genome,
                                   "server=s"   			=> \$server,
-	                              "queue=s"   			=> \$queue,                                                                    
+                                  "queue=s"   			=> \$queue,                                                                    
                                   "help"      			=> \$help,
-	                              "submit=s"   			=> \$submit,
-	                              "BismarkRefereDb=s"   => \$BismarkRefereDb,
-	                              "phred=s"             => \$phred,
-	                             );
+                                  "submit=s"   			=> \$submit,
+                                  "BismarkRefereDb=s"           => \$BismarkRefereDb,
+                                  "phred=s"                     => \$phred,
+                                  );
 	
     unless (defined $genome){
     warn "\n\n\t[Error]: Please respecify essential command line options!\n";
     print_helpfile();
-	}
+    }
     #################################################################################################
     ##################### SmartBismark Version and Usage (Version and Usage) ########################
     #################################################################################################
