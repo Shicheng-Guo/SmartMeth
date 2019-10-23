@@ -13,13 +13,21 @@
 BiocManager::install("ChAMP") 
 BiocManager::install("doParallel") 
 BiocManager::install("benchmarkme") 
+BiocManager::install("minfiData")
 benchmarkme::get_ram()
 detectCores()
 
 library("ChAMP")
 library("doParallel")
+library("minfi")
+library("minfiData")
+
 Dir="/mnt/bigdata/Genetic/Projects/shg047/methylation/clep/450k"
 set.seed(11)
+
+RGSet <- read.metharray(getwd())
+
+targets <- read.metharray.sheet(Dir)
 
 RGSet <- read.metharray.exp(getwd())
 phenoData <- pData(RGSet)
@@ -28,7 +36,9 @@ manifest <- getManifest(RGSet)
 head(getProbeInfo(manifest))
 myNormalRGSet<-preprocessFunnorm(RGSet, nPCs=4, sex = NULL, bgCorr = TRUE,dyeCorr = TRUE, keepCN = TRUE, ratioConvert = TRUE,verbose = TRUE)
 
+myLoad <- champ.load(Dir,filterBeads=TRUE,arraytype="450K",method="minfi")
 myLoad <- champ.load(Dir,filterBeads=TRUE,arraytype="450K")
+
 # EPIC has 411 control probes
 pdf("AMP.450K.QC.pdf")
 champ.QC()
@@ -46,7 +56,7 @@ seed=110
 myNorm1 <- champ.norm(beta=myLoad$beta,arraytype="450K",cores=5,method="BMIQ")
 myNorm2 <- champ.norm(beta=myLoad$beta,arraytype="450K",cores=5,method="PBC")
 myNorm3 <- champ.norm(beta=myLoad$beta,arraytype="450K",cores=5,method="SWAN")
-myNorm4 <- champ.norm(beta=myLoad$beta,arraytype="450K",cores=5,method="FunctionalNormalize")
+myNorm4 <- champ.norm(beta=myLoad$beta,arraytype="450K",cores=5,method="FunctionalNormalization")
 		  
 champ.QC(beta=myLoad$beta, pheno = myLoad$pd$Sample_Group,mdsPlot = TRUE, densityPlot = TRUE, dendrogram = TRUE, PDFplot = TRUE,Rplot = TRUE, Feature.sel = "None", resultsDir = "./CHAMP_QCimages/")
 champ.QC(beta=myNorm1, pheno = myLoad$pd$Sample_Group,mdsPlot = TRUE, densityPlot = TRUE, dendrogram = TRUE, PDFplot = TRUE,Rplot = TRUE, Feature.sel = "None", resultsDir = "./CHAMP_QCimages_Norm_BMIQ/")
