@@ -1,8 +1,10 @@
 #########################################################################################
-###   Title : Genome-wide DNA methylation analysis for atrial fibrillation patient
+###   Title : Systematic evaluation to whole genome bisulfite sequencing
 ###   Author: Shicheng Guo, Ph.D. Email: Shihcheng.Guo@Gmail.com 
-###   Section 1. Function predifinition 
-###   Section 2. Data Cleaning
+###   Section 1. WGBS 
+###   Section 2. 450K
+###   Section 2. 850K
+###   Section 3. Data Cleaning
 ###   Section 3. Differential Analysis
 ###   Section 4. Pathway Analysis
 ###   Section 5. GEO Validation (GSE34639,GSE27895)
